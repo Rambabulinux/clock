@@ -1,0 +1,61 @@
+pipeline {
+    agent any
+    tools{
+      jdk 'OpenJDK8'
+      maven 'Maven3'
+    }
+    stages {
+        stage('SCM Checkout') {
+            steps{
+            git branch: 'main', changelog: false, poll: false, url: 'https://github.com/Rambabulinux/clock.git'
+            echo 'Git Checkout Completed'   
+            }
+        }
+
+        stage('Build docker image') {
+            steps {  
+                script {
+                	withDockerRegistry(credentialsId: 'Docker_new') {
+				        sh 'docker build -t rambabup/clock:1.$BUILD_NUMBER .'
+			        	echo 'Build Image Completed'
+		            	}
+		        }
+            }
+        }
+        
+        stage('Trivy Scan') {
+            steps {
+                script {
+                    sh "trivy image --scanners vuln rambabup/clock:1.$BUILD_NUMBER"
+                    echo 'Trivy Scan Image is Completed'
+                }
+                
+            }
+        }
+        
+        stage('Create The containers') {
+            steps {  
+                script {
+				        sh 'docker run -d --name web$BUILD_NUMBER -p 500$BUILD_NUMBER:80 rambabup/clock:1.$BUILD_NUMBER'
+			        	echo 'Container is Created'
+		           }
+            }
+        }
+        
+        stage('push image') {
+            steps{
+                script {
+                    withDockerRegistry(credentialsId: 'Docker_new') {
+                        sh 'docker push rambabup/clock:1.$BUILD_NUMBER'
+                        echo 'Push Image Completed'
+                    }
+                }
+            }
+        }
+}
+post {
+        always {
+            sh 'docker logout'
+        }
+    }
+}
